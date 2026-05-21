@@ -77,6 +77,8 @@ namespace InvoiceGenerator.Infrastructure.Services
 
                     SposobDst = orderHeader.Courier,
                     RodzajCeny = orderHeader.PriceGroup,
+
+                    ExpoNorm = orderHeader.ExpoNorm
                 };
 
                 if (orders.Count() == 1)

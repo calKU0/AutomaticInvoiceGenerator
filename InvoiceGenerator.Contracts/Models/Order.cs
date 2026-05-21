@@ -10,6 +10,7 @@
         public string DestinationCountry { get; set; } = default!;
         public string Courier { get; set; } = default!;
         public int PaymentType { get; set; }
+        public int ExpoNorm { get; set; }
         public int PaymentDueDateClarion { get; set; }
         public int PriceGroup { get; set; }
         public string? Description { get; set; }
