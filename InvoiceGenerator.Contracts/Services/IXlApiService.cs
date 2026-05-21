@@ -7,6 +7,6 @@ namespace InvoiceGenerator.Contracts.Services
     {
         public void Login();
         public void Logout();
-        public CreateInvoiceResult CreateInvoice(Order order);
+        public CreateInvoiceResult CreateInvoice(List<Order> orders);
     }
 }

@@ -27,13 +27,28 @@ namespace InvoiceGenerator.Service.Services
                 var orders = await _orderRepo.GetOrders();
                 _logger.LogInformation("Retrieved {OrderCount} orders for invoice generation.", orders.Count());
 
-                foreach (var order in orders)
+                var grouped = orders.GroupBy(d => new
                 {
+                    d.ClientAcronym,
+                    d.Courier,
+                    d.PaymentType,
+                    d.PaymentDueDateClarion,
+                    d.AddressId,
+                    d.ClientId,
+                    d.DefaultDocumentType
+                }).ToList();
+
+                _logger.LogInformation("Grouped orders into {GroupCount} groups for invoice generation.", grouped.Count());
+
+                foreach (var group in grouped)
+                {
+                    var orderList = group.ToList();
+
                     try
                     {
-                        var result = _xlApiService.CreateInvoice(order);
+                        var result = _xlApiService.CreateInvoice(orderList);
                         string invoiceName = await _invoiceRepo.GetInvoiceName(result.InvoiceId, result.InvoiceType);
-                        _logger.LogInformation("Successfully generated invoice {InvoiceName} ({InvoiceId}) for order {OrderName} ({OrderId})", invoiceName, result.InvoiceId, order.Name, order.Id);
+                        _logger.LogInformation("Successfully generated invoice {InvoiceName} ({InvoiceId}) for {OrdersCount} orders {OrderName} ({OrdersId})", invoiceName, result.InvoiceId, orderList.Count(), string.Join(", ", orderList.Select(o => o.Name)), string.Join(", ", orderList.Select(o => o.Id)));
 
                         try
                         {
@@ -57,7 +72,7 @@ namespace InvoiceGenerator.Service.Services
                     }
                     catch (Exception ex)
                     {
-                        _logger.LogError(ex, "Error generating invoice for order {OrderName} ({OrderId})", order.Name, order.Id);
+                        _logger.LogError(ex, "Error generating invoice for {OrdersCount} orders {OrderName} ({OrdersId})", orderList.Count(), string.Join(", ", orderList.Select(o => o.Name)), string.Join(", ", orderList.Select(o => o.Id)));
                     }
                 }
 

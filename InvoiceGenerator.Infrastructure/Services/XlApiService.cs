@@ -56,7 +56,7 @@ namespace InvoiceGenerator.Infrastructure.Services
             }
         }
 
-        public CreateInvoiceResult CreateInvoice(Order order)
+        public CreateInvoiceResult CreateInvoice(List<Order> orders)
         {
             int invoiceId = 0;
             try
@@ -64,50 +64,70 @@ namespace InvoiceGenerator.Infrastructure.Services
                 AttachThreadToClarion(1);
                 ManageTransaction(0);
 
+                var orderHeader = orders.First();
+
                 XLDokumentNagInfo_20251 invoice = new XLDokumentNagInfo_20251
                 {
                     Wersja = _settings.ApiVersion,
 
-                    Typ = order.DefaultDocumentType,
+                    Typ = orderHeader.DefaultDocumentType,
 
-                    ZamNumer = order.Id,
-                    ZamFirma = order.Company,
-                    ZamTyp = order.Type,
-                    ZamLp = order.Lp,
+                    Forma = orderHeader.PaymentType,
+                    Termin = orderHeader.PaymentDueDateClarion,
 
-                    Forma = order.PaymentType,
-                    Termin = order.PaymentDueDateClarion,
-
-                    SposobDst = order.Courier,
-
-                    RodzajCeny = order.PriceGroup,
-                    Opis = order.Description
+                    SposobDst = orderHeader.Courier,
+                    RodzajCeny = orderHeader.PriceGroup,
                 };
+
+                if (orders.Count() == 1)
+                {
+                    invoice.ZamFirma = orderHeader.Company;
+                    invoice.ZamTyp = orderHeader.Type;
+                    invoice.ZamNumer = orderHeader.Id;
+                    invoice.ZamLp = orderHeader.Lp;
+                }
+                else
+                {
+                    invoice.Akronim = orderHeader.ClientAcronym;
+                    invoice.KnDTyp = orderHeader.ClientType;
+                    invoice.KnDFirma = orderHeader.ClientCompany;
+                    invoice.KnDNumer = orderHeader.ClientId;
+                    invoice.KnDLp = orderHeader.ClientNo;
+
+                    invoice.AdwTyp = orderHeader.AddressType;
+                    invoice.AdwFirma = orderHeader.AddressCompany;
+                    invoice.AdwNumer = orderHeader.AddressId;
+                    invoice.AdwLp = orderHeader.AddressNo;
+                    invoice.Opis = string.Join(" ", orders.DistinctBy(d => d.Description).Select(d => d.Description)).Trim();
+                }
 
                 int result = cdn_api.cdn_api.XLNowyDokument(_xlSessionId, ref invoiceId, invoice);
                 if (result != 0)
                     throw new Exception(CheckError(result, XlApiFunctionCode.NowyDokument));
 
-                foreach (var item in order.Items)
+                foreach (var order in orders)
                 {
-                    XLDokumentElemInfo_20251 invoiceElement = new XLDokumentElemInfo_20251
+                    foreach (var item in order.Items)
                     {
-                        Wersja = _settings.ApiVersion,
-                        TowarKod = item.Code,
-                        Ilosc = item.Quantity.ToString(),
-                        Cena = item.Price.ToString(),
-                        CenaP = item.PriceBeforeDiscount.ToString(),
-                        Waluta = item.Currency,
+                        XLDokumentElemInfo_20251 invoiceElement = new XLDokumentElemInfo_20251
+                        {
+                            Wersja = _settings.ApiVersion,
+                            TowarKod = item.Code,
+                            Ilosc = item.Quantity.ToString(),
+                            Cena = item.Price.ToString(),
+                            CenaP = item.PriceBeforeDiscount.ToString(),
+                            Waluta = item.Currency,
 
-                        ZamFirma = order.Company,
-                        ZamTyp = order.Type,
-                        ZamLp = item.Lp,
-                        ZamNumer = order.Id
-                    };
+                            ZamFirma = order.Company,
+                            ZamTyp = order.Type,
+                            ZamLp = item.Lp,
+                            ZamNumer = order.Id
+                        };
 
-                    result = cdn_api.cdn_api.XLDodajPozycje(invoiceId, invoiceElement);
-                    if (result != 0)
-                        throw new Exception($"Product: {item.Code} - {CheckError(result, XlApiFunctionCode.DodajPozycje)}");
+                        result = cdn_api.cdn_api.XLDodajPozycje(invoiceId, invoiceElement);
+                        if (result != 0)
+                            throw new Exception($"Product: {item.Code} - {CheckError(result, XlApiFunctionCode.DodajPozycje)}");
+                    }
                 }
 
                 XLZamkniecieDokumentuInfo_20251 closeInfo = new XLZamkniecieDokumentuInfo_20251
@@ -120,12 +140,12 @@ namespace InvoiceGenerator.Infrastructure.Services
                 if (result != 0)
                     throw new Exception(CheckError(result, XlApiFunctionCode.ZamknijDokument));
 
-                if (!string.IsNullOrEmpty(order.PackingRequirements))
+                if (orders.Any(p => !string.IsNullOrEmpty(p.PackingRequirements)))
                 {
                     var attribute = new AttributeObject
                     {
                         ClassName = "Wytyczne klienta do wysyłek",
-                        Value = order.PackingRequirements,
+                        Value = string.Join(" ", orders.DistinctBy(d => d.PackingRequirements).Select(d => d.PackingRequirements)).Trim(),
                         RefCompany = invoice.GIDFirma,
                         RefType = invoice.GIDTyp,
                         RefLp = invoice.GIDLp,
